@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 concurrency:
@@ -33,6 +34,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Wait for GitHub's branch-based Pages build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            for (let attempt = 0; attempt < 60; attempt++) {
+              const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                ...context.repo, head_sha: context.sha, per_page: 100
+              });
+              const branchBuilds = data.workflow_runs.filter(run =>
+                run.id !== context.runId &&
+                run.path === 'dynamic/pages/pages-build-deployment'
+              );
+              if (branchBuilds.every(run => run.status === 'completed')) return;
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            throw new Error('Branch-based Pages build did not finish in time.');
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
