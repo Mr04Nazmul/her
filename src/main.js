@@ -13,9 +13,13 @@ let timer = null;
 let animationFrame = null;
 let endedDuringStart = false;
 let sessionError = '';
+let audioMode = 'listening';
+const voiceBars = Array.from($('voice-bars').children);
+const barLevels = voiceBars.map(() => 4);
 
 function setState(next) {
   state = next;
+  updateVoiceMode();
   const active = next === 'connected';
   document.body.dataset.connected = String(active);
   $('orb-scene').dataset.state = active ? (muted ? 'muted' : 'listening') : next;
@@ -43,6 +47,8 @@ function resetSession() {
   animationFrame = null;
   conversation = null;
   muted = false;
+  audioMode = 'listening';
+  resetVoiceBars();
   $('mute-button').setAttribute('aria-pressed', 'false');
   $('mute-button').setAttribute('aria-label', 'Mute microphone');
   $('orb-scene').style.setProperty('--level', '0');
@@ -97,6 +103,8 @@ async function beginConversation() {
       onMessage: (event) => { if (epoch === sessionEpoch) renderMessage(event); },
       onModeChange: ({ mode }) => {
         if (epoch !== sessionEpoch || state !== 'connected') return;
+        audioMode = mode;
+        updateVoiceMode();
         $('orb-scene').dataset.state = muted ? 'muted' : mode;
         $('status').textContent = mode === 'speaking' ? 'Her is speaking' : muted ? 'Your microphone is muted' : 'Listening to you';
       },
@@ -144,12 +152,54 @@ async function endConversation() {
   finally { resetSession(); }
 }
 
+function updateVoiceMode() {
+  const mode = state !== 'connected' ? state : audioMode === 'speaking' ? 'speaking' : muted ? 'muted' : 'listening';
+  $('voice-monitor').dataset.mode = mode;
+  $('voice-source').textContent = mode === 'speaking' ? 'SADIA IS SPEAKING' : mode === 'listening' ? 'YOUR MICROPHONE' : mode === 'muted' ? 'MICROPHONE MUTED' : 'SADIA ↔ YOU';
+  $('voice-caption').textContent = mode === 'speaking' ? 'Sadia বলছে…' : mode === 'listening' ? 'বলো, আমি শুনছি…' : mode === 'muted' ? 'তোমার মাইক বন্ধ আছে' : mode === 'connecting' ? 'সংযোগ হচ্ছে…' : mode === 'ending' ? 'কথোপকথন শেষ হচ্ছে…' : 'কথা শুরু করলেই কণ্ঠের সঙ্গে নড়বে';
+}
+
+function resetVoiceBars() {
+  voiceBars.forEach((bar, i) => {
+    barLevels[i] = 4;
+    bar.setAttribute('height', '4');
+    bar.setAttribute('y', '28');
+  });
+}
+
+function paintVoiceBars(input, output, inputVolume, outputVolume) {
+  voiceBars.forEach((bar, i) => {
+    // Log-spaced bins emphasize speech frequencies. Both sides can animate;
+    // muting removes only microphone energy, never the agent's playback.
+    const energy = (data) => {
+      if (!data?.length) return 0;
+      const start = Math.min(data.length - 1, Math.floor(Math.pow(i / voiceBars.length, 2) * data.length * .38));
+      const end = Math.min(data.length, Math.max(start + 1, Math.ceil(Math.pow((i + 1) / voiceBars.length, 2) * data.length * .38)));
+      let sum = 0;
+      for (let bin = start; bin < end; bin++) sum += data[bin];
+      return sum / (end - start) / 255;
+    };
+    const micEnergy = muted ? 0 : input?.length ? energy(input) : inputVolume;
+    const agentEnergy = output?.length ? energy(output) : outputVolume;
+    const level = Math.min(1, Math.max(0, micEnergy, agentEnergy));
+    const target = 4 + Math.pow(level, .8) * 48;
+    barLevels[i] += (target - barLevels[i]) * (target > barLevels[i] ? .42 : .16);
+    bar.setAttribute('height', barLevels[i].toFixed(2));
+    bar.setAttribute('y', ((60 - barLevels[i]) / 2).toFixed(2));
+  });
+}
+
 function animateOrb() {
   if (!conversation || state !== 'connected') return;
+  let inputVolume = 0, outputVolume = 0, input, output;
   try {
-    const level = Math.max(conversation.getOutputVolume() || 0, muted ? 0 : conversation.getInputVolume() || 0);
-    $('orb-scene').style.setProperty('--level', String(Math.min(1, level)));
-  } catch { /* Some audio devices do not provide analyzer levels. */ }
+    outputVolume = conversation.getOutputVolume() || 0;
+    inputVolume = muted ? 0 : conversation.getInputVolume() || 0;
+  } catch { /* A device may lack volume analysis. */ }
+  try { if (!muted) input = conversation.getInputByteFrequencyData?.(); } catch { /* Fall back to microphone volume. */ }
+  try { output = conversation.getOutputByteFrequencyData?.(); } catch { /* Fall back to playback volume. */ }
+  $('orb-scene').style.setProperty('--level', String(Math.min(1, Math.max(inputVolume, outputVolume))));
+  paintVoiceBars(input, output, inputVolume, outputVolume);
   animationFrame = requestAnimationFrame(animateOrb);
 }
 
@@ -178,6 +228,7 @@ $('mute-button').addEventListener('click', () => {
   if (!conversation || state !== 'connected') return;
   muted = !muted;
   conversation.setMicMuted(muted);
+  updateVoiceMode();
   $('mute-button').setAttribute('aria-pressed', String(muted));
   $('mute-button').setAttribute('aria-label', muted ? 'Unmute microphone' : 'Mute microphone');
   $('status').textContent = muted ? 'Your microphone is muted' : 'Listening to you';
