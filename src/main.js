@@ -81,8 +81,16 @@ function friendlyError(error) {
   return 'সংযোগ করা যায়নি। ইন্টারনেট ও মাইক্রোফোনের অনুমতি চেক করে আবার চেষ্টা করো।';
 }
 
+function upgradeToHttps() {
+  if (window.location?.protocol !== 'http:') return false;
+  const secureUrl = new URL(window.location.href);
+  secureUrl.protocol = 'https:';
+  window.location.replace(secureUrl.href);
+  return true;
+}
+
 async function beginConversation() {
-  if (state !== 'idle') return;
+  if (state !== 'idle' || upgradeToHttps()) return;
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     showError('কথা বলতে HTTPS-এ সাইটটি Safari বা Chrome-এ খোলো।');
     return;
@@ -211,6 +219,7 @@ function openDialog(start = false) {
 
 $('call-button').addEventListener('click', () => {
   if (state === 'connected') return void endConversation();
+  if (upgradeToHttps()) return;
   if (!accepted) return openDialog(true);
   void beginConversation();
 });
