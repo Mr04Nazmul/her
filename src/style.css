@@ -28,11 +28,11 @@ body[data-transcript=true] .conversation-stage{column-gap:18px}body[data-transcr
 @media(max-width:800px){.voice-monitor,body[data-transcript=true] .voice-monitor{order:0;max-width:none;width:100%;border:0;border-bottom:1px solid #c6b8ff12;padding:0 5px 16px;margin-bottom:17px}.monitor-heading{font-size:6px;letter-spacing:1px}.monitor-label{font-size:7px}.voice-spectrum{height:54px;margin:12px 0 4px}.monitor-caption{font-size:8px}.session-dock>.state-line{margin:13px 0 0}.session-dock>.call-hint{margin:10px 0 0}}
 @media(prefers-reduced-motion:reduce){.voice-spectrum{filter:none}}
 
-/* Live media is rendered only after a real provider connection. */
-[hidden] { display: none !important; }
-.avatar-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 24px; background: #15111e; margin: 24px auto; }
-.avatar-stage video { width: 100%; height: 100%; object-fit: cover; }
-.avatar-badge { position: absolute; top: 18px; left: 18px; padding: 9px 12px; border-radius: 20px; background: #09090eac; color: #eee4ff; font-size: 11px; letter-spacing: .1em; }
-.video-call-button { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 18px auto 0; padding: 14px 24px; border: 1px solid #79648d; border-radius: 99px; background: #21182e; color: #eadfff; font: inherit; cursor: pointer; }
-.video-call-button:disabled { opacity: .45; cursor: default; }
-.video-call-button:focus-visible { outline: 2px solid #e0c8ff; outline-offset: 5px; }
+[hidden]{display:none!important}
+.avatar-stage{width:100%;height:460px;overflow:hidden;border-radius:24px;margin:22px auto;background:#15111e}
+.avatar-stage iframe{display:block;width:100%;height:100%;border:0}
+.avatar-help{font-size:12px;color:#a99dbb;text-align:center;line-height:1.8}
+.video-call-button{display:inline-block;margin:10px 4px;padding:10px 16px;border:1px solid #79648d;border-radius:24px;background:#21182e;color:#eadfff;font:inherit;font-size:12px;cursor:pointer}
+.video-call-button:disabled{opacity:.45;cursor:default}
+.video-call-button:focus-visible{outline:2px solid #e0c8ff;outline-offset:4px}
+@media(max-width:800px){.avatar-stage{height:430px;margin:18px 0}.voice-space{min-width:0}}

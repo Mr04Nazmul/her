@@ -3,23 +3,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace("import { Conversation } from '@elevenlabs/client';", '').replace("import.meta.env.VITE_AVATAR_SESSION_URL", "avatarEndpoint").replace("await import('./avatar.js')", "await Promise.resolve({ connectAvatar: globalThis.connectAvatar })");
-function setup({ avatarEndpoint = '', avatarFailure = false, deny = false, disconnectOnStart = false, inputData, outputData, url = 'https://itsmesadia.com/' } = {}) {
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace("import { Conversation } from '@elevenlabs/client';", '');
+function setup({ deny = false, disconnectOnStart = false, inputData, outputData, url = 'https://itsmesadia.com/' } = {}) {
   const elements = new Map();
   const get = (id) => {
-    if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, disabled: false, dataset: {}, style: { setProperty() {} }, attrs: {}, handlers: {}, addEventListener(name, fn) { this.handlers[name] = fn; }, setAttribute(k, v) { this.attrs[k] = v; }, focus() {}, showModal() {}, close() {}, children: [], append(...items) { this.children.push(...items); }, remove() {}, value: '' });
+    if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, disabled: false, dataset: {}, style: { setProperty() {} }, attrs: {}, handlers: {}, addEventListener(name, fn) { this.handlers[name] = fn; }, setAttribute(k, v) { this.attrs[k] = v; }, focus() {}, children: [], append(...items) { this.children.push(...items); }, remove() {}, value: '' });
     return elements.get(id);
   };
-  get('dialog-action').firstElementChild = { textContent: '' };
   get('voice-bars').children = Array.from({ length: 40 }, (_, i) => get(`bar-${i}`));
   let redirected;
   const location = new URL(url);
   location.replace = (value) => { redirected = value; };
-  let avatarClosed = 0, avatarSent = 0;
   let options, stopped = 0, ended = 0, muted = null, starts = 0;
-  const session = { setVolume() {}, async endSession() { ended++; options.onDisconnect(); }, setMicMuted(value) { muted = value; }, getOutputVolume() { return 0; }, getInputVolume() { return 0; }, getInputByteFrequencyData() { return inputData; }, getOutputByteFrequencyData() { return outputData; } };
+  const session = { async endSession() { ended++; options.onDisconnect(); }, setMicMuted(value) { muted = value; }, getOutputVolume() { return 0; }, getInputVolume() { return 0; }, getInputByteFrequencyData() { return inputData; }, getOutputByteFrequencyData() { return outputData; } };
   const context = vm.createContext({
-    AbortController, avatarEndpoint, async connectAvatar() { if (avatarFailure) throw new Error('avatar failed'); return { close() { avatarClosed++; }, setFormat() {}, send() { avatarSent++; }, interrupt() {} }; },
     Conversation: { async startSession(opts) { starts++; options = opts; if (disconnectOnStart) opts.onDisconnect(); return session; } },
     document: { getElementById: get, body: { dataset: {} }, addEventListener() {}, createElement: () => get(`generated-${elements.size}`) },
     URL,
@@ -28,7 +25,7 @@ function setup({ avatarEndpoint = '', avatarFailure = false, deny = false, disco
     setInterval: () => 1, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, console,
   });
   vm.runInContext(source + '\nglobalThis.app = { beginConversation, endConversation, renderAudio: animateOrb, getState: () => state };', context);
-  return { app: context.app, get, stats: () => ({ stopped, ended, muted, starts, redirected, avatarClosed, avatarSent }), callbacks: () => options };
+  return { app: context.app, get, stats: () => ({ stopped, ended, muted, starts, redirected }) };
 }
 
 test('successful call releases permission probe, enables controls and cleans up on hangup', async () => {
@@ -91,30 +88,23 @@ test('HTTP call button upgrades the same address before consent, microphone or s
   assert.equal(fixture.stats().starts, 0);
 });
 
-test('unconfigured video call does not start a paid voice-only session', () => {
+test('switching to voice unloads the embedded video session', async () => {
+  const fixture = setup();
+  await fixture.app.beginConversation();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'about:blank');
+  assert.equal(fixture.get('avatar-stage').hidden, true);
+  assert.equal(fixture.get('video-call-button').disabled, true);
+  await fixture.app.endConversation();
+  assert.equal(fixture.get('video-call-button').disabled, false);
+});
+
+test('video controls reopen the published persona and close by unloading it', () => {
   const fixture = setup();
   fixture.get('video-call-button').handlers.click();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'https://lab.anam.ai/frame/aa71016b-f700-5441-b565-69876ce7619f');
+  assert.equal(fixture.get('avatar-stage').hidden, false);
   assert.equal(fixture.stats().starts, 0);
-  assert.match(fixture.get('error-message').textContent, /সার্ভিস/);
-});
-test('avatar startup failure resets call controls without starting ElevenLabs', async () => {
-  const fixture = setup({ avatarEndpoint: 'https://avatar.example/session', avatarFailure: true });
-  fixture.get('video-call-button').handlers.click();
-  await fixture.app.beginConversation();
-  assert.equal(fixture.app.getState(), 'idle');
-  assert.equal(fixture.stats().starts, 0);
-  assert.equal(fixture.get('video-call-button').disabled, false);
-  assert.equal(fixture.get('error-message').textContent, 'avatar failed');
-});
-test('video call routes actual audio and closes avatar alongside voice on hangup', async () => {
-  const fixture = setup({ avatarEndpoint: 'https://avatar.example/session' });
-  fixture.get('video-call-button').handlers.click();
-  await fixture.app.beginConversation();
-  assert.equal(fixture.app.getState(), 'connected');
-  assert.equal(fixture.callbacks().connectionType, 'websocket');
-  fixture.callbacks().onAudio('AAA=');
-  assert.equal(fixture.stats().avatarSent, 1);
-  await fixture.app.endConversation();
-  assert.equal(fixture.stats().avatarClosed, 1);
+  fixture.get('close-video-button').handlers.click();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'about:blank');
   assert.equal(fixture.get('avatar-stage').hidden, true);
 });

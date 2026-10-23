@@ -1,9 +1,5 @@
 import { Conversation } from '@elevenlabs/client';
 
-const AVATAR_ENDPOINT = import.meta.env.VITE_AVATAR_SESSION_URL || '';
-let videoCall = false;
-let avatar = null;
-let avatarAbort = null;
 const AGENT_ID = 'agent_1401m5h48y1yf47vfts6vvfzcbea';
 const $ = (id) => document.getElementById(id);
 let conversation = null;
@@ -46,14 +42,6 @@ function showError(message) {
 }
 
 function resetSession() {
-  avatarAbort?.abort();
-  avatarAbort = null;
-  avatar?.close();
-  avatar = null;
-  $('avatar-stage').hidden = true;
-  $('orb-scene').hidden = false;
-  $('video-call-button').disabled = false;
-  videoCall = false;
   clearInterval(timer);
   cancelAnimationFrame(animationFrame);
   timer = null;
@@ -102,7 +90,15 @@ function upgradeToHttps() {
   return true;
 }
 
+function closeVideo() {
+  $('avatar-frame').setAttribute('src', 'about:blank');
+  $('avatar-stage').hidden = true;
+  $('orb-scene').hidden = false;
+  $('close-video-button').hidden = true;
+}
+
 async function beginConversation() {
+  closeVideo();
   if (state !== 'idle' || upgradeToHttps()) return;
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     showError('কথা বলতে HTTPS-এ সাইটটি Safari বা Chrome-এ খোলো।');
@@ -118,28 +114,9 @@ async function beginConversation() {
     const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
     probe.getTracks().forEach((track) => track.stop());
     if (epoch !== sessionEpoch) return;
-    if (videoCall) {
-      avatarAbort = new AbortController();
-      const { connectAvatar } = await import('./avatar.js');
-      avatar = await connectAvatar({ endpoint: AVATAR_ENDPOINT, video: $('avatar-video'), audio: $('avatar-audio'), signal: avatarAbort.signal,
-        onFailure: () => { if (epoch === sessionEpoch) { sessionError = 'ভিডিও সংযোগ বন্ধ হয়েছে। আবার কল করো।'; showError(sessionError); if (conversation) void endConversation(); else avatarAbort?.abort(); } },
-      });
-      if (epoch !== sessionEpoch) { avatar.close(); return; }
-    }
     const current = await Conversation.startSession({
       agentId: AGENT_ID,
-      onConversationCreated: (session) => { if (videoCall) session.setVolume({ volume: 0 }); },
-      connectionType: videoCall ? 'websocket' : 'webrtc',
-      onConversationMetadata: (metadata) => {
-        if (epoch !== sessionEpoch || !avatar) return;
-        try { avatar.setFormat(metadata.agent_output_audio_format); }
-        catch { sessionError = 'ভিডিওর অডিও ফরম্যাট মেলেনি।'; void endConversation(); }
-      },
-      onAudio: (base64) => {
-        if (epoch !== sessionEpoch || !avatar || sessionError) return;
-        try { avatar.send(base64); } catch { sessionError = 'ভিডিওর অডিও পাঠানো যায়নি।'; void endConversation(); }
-      },
-      onInterruption: () => { if (epoch === sessionEpoch) avatar?.interrupt(); },
+      connectionType: 'webrtc',
       onMessage: (event) => { if (epoch === sessionEpoch) renderMessage(event); },
       onModeChange: ({ mode }) => {
         if (epoch !== sessionEpoch || state !== 'connected') return;
@@ -168,7 +145,6 @@ async function beginConversation() {
       return;
     }
     conversation = current;
-    if (videoCall) current.setVolume({ volume: 0 }); // Playback comes only from synchronized avatar media.
     setState('connected');
     startedAt = Date.now();
     $('duration').textContent = '00:00';
@@ -179,9 +155,8 @@ async function beginConversation() {
     animateOrb();
   } catch (error) {
     if (epoch !== sessionEpoch) return;
-    const message = videoCall ? error.message : friendlyError(error);
     resetSession();
-    showError(message);
+    showError(friendlyError(error));
   }
 }
 
@@ -253,13 +228,13 @@ function openDialog(start = false) {
 
 $('video-call-button').addEventListener('click', () => {
   if (state !== 'idle' || upgradeToHttps()) return;
-  if (!AVATAR_ENDPOINT) { showError('লাইভ ভিডিও এখনো চালু হয়নি। অ্যাভাটার সার্ভিস যুক্ত করতে হবে। Voice call ব্যবহার করতে পারো।'); return; }
-  videoCall = true;
+  $('avatar-frame').setAttribute('src', 'https://lab.anam.ai/frame/aa71016b-f700-5441-b565-69876ce7619f');
   $('avatar-stage').hidden = false;
   $('orb-scene').hidden = true;
-  if (!accepted) return openDialog(true);
-  void beginConversation();
+  $('close-video-button').hidden = false;
 });
+$('close-video-button').addEventListener('click', closeVideo);
+
 $('call-button').addEventListener('click', () => {
   if (state === 'connected') return void endConversation();
   if (upgradeToHttps()) return;
@@ -272,8 +247,8 @@ $('dialog-action').addEventListener('click', () => {
   $('info-dialog').close();
   if (shouldStart) { accepted = true; void beginConversation(); }
 });
-$('dialog-close').addEventListener('click', () => { if (state === 'idle') resetSession(); $('info-dialog').close(); });
-$('info-dialog').addEventListener('close', () => { startAfterDialog = false; if (state === 'idle') resetSession(); });
+$('dialog-close').addEventListener('click', () => $('info-dialog').close());
+$('info-dialog').addEventListener('close', () => { startAfterDialog = false; });
 $('about-button').addEventListener('click', () => openDialog());
 $('privacy-button').addEventListener('click', () => openDialog());
 $('mute-button').addEventListener('click', () => {
