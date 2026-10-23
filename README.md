@@ -29,12 +29,3 @@ This page does not persist transcripts. ElevenLabs processing and retention foll
 Production build and automated lifecycle checks are run before deployment. Browser visual QA and a real microphone conversation were unavailable in the build environment; check audio on the target phone/browser.
 
 SDK reference: https://elevenlabs.io/docs/eleven-agents/libraries/java-script
-
-
-## Live AI video
-
-The portrait area embeds the published Anam persona `aa71016b-f700-5441-b565-69876ce7619f`, using the clean Sadia portrait and imported ElevenLabs Sadia cloned voice. Only `https://itsmesadia.com` is allowed to embed it. Anam manages live video, turn taking and the video call controls; the existing ElevenLabs agent remains the separate voice-only option. No API key is shipped to visitors.
-
-Use Start call inside the portrait to begin. “ভিডিও বন্ধ · শুধু ভয়েস” unloads the frame, releasing the embedded session. Starting a voice-only call also unloads the video frame to avoid concurrent microphones. The video button is disabled during voice sessions. Video transcripts stay inside Anam; the site transcript is for voice-only calls.
-
-Anam plan limits and ElevenLabs credit availability apply. This is an AI avatar, not a live human. A real spoken conversation on iPhone still needs validation.
