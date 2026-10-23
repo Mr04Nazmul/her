@@ -23,6 +23,8 @@ jobs:
       - run: npm ci
       - run: node --test tests/*.test.mjs
       - run: npm run build
+        env:
+          VITE_AVATAR_SESSION_URL: ${{ vars.AVATAR_SESSION_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

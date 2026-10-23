@@ -1,5 +1,9 @@
 import { Conversation } from '@elevenlabs/client';
 
+const AVATAR_ENDPOINT = import.meta.env.VITE_AVATAR_SESSION_URL || '';
+let videoCall = false;
+let avatar = null;
+let avatarAbort = null;
 const AGENT_ID = 'agent_1401m5h48y1yf47vfts6vvfzcbea';
 const $ = (id) => document.getElementById(id);
 let conversation = null;
@@ -23,6 +27,7 @@ function setState(next) {
   const active = next === 'connected';
   document.body.dataset.connected = String(active);
   $('orb-scene').dataset.state = active ? (muted ? 'muted' : 'listening') : next;
+  $('video-call-button').disabled = next !== 'idle';
   $('call-button').disabled = next === 'connecting' || next === 'ending';
   $('call-label').textContent = active ? 'End conversation' : next === 'connecting' ? 'Connecting…' : next === 'ending' ? 'Ending…' : 'Let’s talk';
   $('button-arrow').textContent = active ? '×' : '↗';
@@ -41,6 +46,14 @@ function showError(message) {
 }
 
 function resetSession() {
+  avatarAbort?.abort();
+  avatarAbort = null;
+  avatar?.close();
+  avatar = null;
+  $('avatar-stage').hidden = true;
+  $('orb-scene').hidden = false;
+  $('video-call-button').disabled = false;
+  videoCall = false;
   clearInterval(timer);
   cancelAnimationFrame(animationFrame);
   timer = null;
@@ -105,9 +118,28 @@ async function beginConversation() {
     const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
     probe.getTracks().forEach((track) => track.stop());
     if (epoch !== sessionEpoch) return;
+    if (videoCall) {
+      avatarAbort = new AbortController();
+      const { connectAvatar } = await import('./avatar.js');
+      avatar = await connectAvatar({ endpoint: AVATAR_ENDPOINT, video: $('avatar-video'), audio: $('avatar-audio'), signal: avatarAbort.signal,
+        onFailure: () => { if (epoch === sessionEpoch) { sessionError = 'ভিডিও সংযোগ বন্ধ হয়েছে। আবার কল করো।'; showError(sessionError); if (conversation) void endConversation(); else avatarAbort?.abort(); } },
+      });
+      if (epoch !== sessionEpoch) { avatar.close(); return; }
+    }
     const current = await Conversation.startSession({
       agentId: AGENT_ID,
-      connectionType: 'webrtc',
+      onConversationCreated: (session) => { if (videoCall) session.setVolume({ volume: 0 }); },
+      connectionType: videoCall ? 'websocket' : 'webrtc',
+      onConversationMetadata: (metadata) => {
+        if (epoch !== sessionEpoch || !avatar) return;
+        try { avatar.setFormat(metadata.agent_output_audio_format); }
+        catch { sessionError = 'ভিডিওর অডিও ফরম্যাট মেলেনি।'; void endConversation(); }
+      },
+      onAudio: (base64) => {
+        if (epoch !== sessionEpoch || !avatar || sessionError) return;
+        try { avatar.send(base64); } catch { sessionError = 'ভিডিওর অডিও পাঠানো যায়নি।'; void endConversation(); }
+      },
+      onInterruption: () => { if (epoch === sessionEpoch) avatar?.interrupt(); },
       onMessage: (event) => { if (epoch === sessionEpoch) renderMessage(event); },
       onModeChange: ({ mode }) => {
         if (epoch !== sessionEpoch || state !== 'connected') return;
@@ -136,6 +168,7 @@ async function beginConversation() {
       return;
     }
     conversation = current;
+    if (videoCall) current.setVolume({ volume: 0 }); // Playback comes only from synchronized avatar media.
     setState('connected');
     startedAt = Date.now();
     $('duration').textContent = '00:00';
@@ -146,8 +179,9 @@ async function beginConversation() {
     animateOrb();
   } catch (error) {
     if (epoch !== sessionEpoch) return;
+    const message = videoCall ? error.message : friendlyError(error);
     resetSession();
-    showError(friendlyError(error));
+    showError(message);
   }
 }
 
@@ -217,6 +251,15 @@ function openDialog(start = false) {
   $('info-dialog').showModal();
 }
 
+$('video-call-button').addEventListener('click', () => {
+  if (state !== 'idle' || upgradeToHttps()) return;
+  if (!AVATAR_ENDPOINT) { showError('লাইভ ভিডিও এখনো চালু হয়নি। অ্যাভাটার সার্ভিস যুক্ত করতে হবে। Voice call ব্যবহার করতে পারো।'); return; }
+  videoCall = true;
+  $('avatar-stage').hidden = false;
+  $('orb-scene').hidden = true;
+  if (!accepted) return openDialog(true);
+  void beginConversation();
+});
 $('call-button').addEventListener('click', () => {
   if (state === 'connected') return void endConversation();
   if (upgradeToHttps()) return;
@@ -229,8 +272,8 @@ $('dialog-action').addEventListener('click', () => {
   $('info-dialog').close();
   if (shouldStart) { accepted = true; void beginConversation(); }
 });
-$('dialog-close').addEventListener('click', () => $('info-dialog').close());
-$('info-dialog').addEventListener('close', () => { startAfterDialog = false; });
+$('dialog-close').addEventListener('click', () => { if (state === 'idle') resetSession(); $('info-dialog').close(); });
+$('info-dialog').addEventListener('close', () => { startAfterDialog = false; if (state === 'idle') resetSession(); });
 $('about-button').addEventListener('click', () => openDialog());
 $('privacy-button').addEventListener('click', () => openDialog());
 $('mute-button').addEventListener('click', () => {

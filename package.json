@@ -1,1 +1,1 @@
-{"name":"her-voice","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","check":"node --check src/main.js"},"dependencies":{"@elevenlabs/client":"latest"},"devDependencies":{"vite":"^7.1.0"}}
+{"name":"her-voice","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","check":"node --check src/main.js"},"dependencies":{"@elevenlabs/client":"latest","simli-client":"3.0.3"},"devDependencies":{"vite":"^7.1.0"}}
