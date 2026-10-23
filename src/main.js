@@ -23,6 +23,7 @@ function setState(next) {
   const active = next === 'connected';
   document.body.dataset.connected = String(active);
   $('orb-scene').dataset.state = active ? (muted ? 'muted' : 'listening') : next;
+  $('video-call-button').disabled = next !== 'idle';
   $('call-button').disabled = next === 'connecting' || next === 'ending';
   $('call-label').textContent = active ? 'End conversation' : next === 'connecting' ? 'Connecting…' : next === 'ending' ? 'Ending…' : 'Let’s talk';
   $('button-arrow').textContent = active ? '×' : '↗';
@@ -89,7 +90,15 @@ function upgradeToHttps() {
   return true;
 }
 
+function closeVideo() {
+  $('avatar-frame').setAttribute('src', 'about:blank');
+  $('avatar-stage').hidden = true;
+  $('orb-scene').hidden = false;
+  $('close-video-button').hidden = true;
+}
+
 async function beginConversation() {
+  closeVideo();
   if (state !== 'idle' || upgradeToHttps()) return;
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     showError('কথা বলতে HTTPS-এ সাইটটি Safari বা Chrome-এ খোলো।');
@@ -216,6 +225,15 @@ function openDialog(start = false) {
   $('dialog-action').firstElementChild.textContent = start ? 'Agree & start talking' : 'Got it';
   $('info-dialog').showModal();
 }
+
+$('video-call-button').addEventListener('click', () => {
+  if (state !== 'idle' || upgradeToHttps()) return;
+  $('avatar-frame').setAttribute('src', 'https://lab.anam.ai/frame/aa71016b-f700-5441-b565-69876ce7619f');
+  $('avatar-stage').hidden = false;
+  $('orb-scene').hidden = true;
+  $('close-video-button').hidden = false;
+});
+$('close-video-button').addEventListener('click', closeVideo);
 
 $('call-button').addEventListener('click', () => {
   if (state === 'connected') return void endConversation();

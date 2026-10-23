@@ -87,3 +87,24 @@ test('HTTP call button upgrades the same address before consent, microphone or s
   await fixture.app.beginConversation();
   assert.equal(fixture.stats().starts, 0);
 });
+
+test('switching to voice unloads the embedded video session', async () => {
+  const fixture = setup();
+  await fixture.app.beginConversation();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'about:blank');
+  assert.equal(fixture.get('avatar-stage').hidden, true);
+  assert.equal(fixture.get('video-call-button').disabled, true);
+  await fixture.app.endConversation();
+  assert.equal(fixture.get('video-call-button').disabled, false);
+});
+
+test('video controls reopen the published persona and close by unloading it', () => {
+  const fixture = setup();
+  fixture.get('video-call-button').handlers.click();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'https://lab.anam.ai/frame/aa71016b-f700-5441-b565-69876ce7619f');
+  assert.equal(fixture.get('avatar-stage').hidden, false);
+  assert.equal(fixture.stats().starts, 0);
+  fixture.get('close-video-button').handlers.click();
+  assert.equal(fixture.get('avatar-frame').attrs.src, 'about:blank');
+  assert.equal(fixture.get('avatar-stage').hidden, true);
+});
